@@ -15,8 +15,4 @@ router.get('/instagram', instagramWebhook);
 router.post('/instagram', instagramWebhook);
 router.post('/instagram/debug', instagramWebhookDebug);
 
-// Debug endpoints
-router.get('/instagram/debug', instagramWebhookDebug);
-router.delete('/instagram/debug', clearWebhookLogs);
-
 module.exports = router;
