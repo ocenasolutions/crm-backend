@@ -1,88 +1,113 @@
-const axios = require('axios');
+const Imap = require('imap');
+const { simpleParser } = require('mailparser');
+const Lead = require('../models/Lead');
 
-class EmailService {
-  constructor() {
-    this.apiKey = process.env.BREVO_API_KEY;
-    this.senderEmail = process.env.BREVO_SENDER_EMAIL;
-    this.baseUrl = 'https://api.brevo.com/v3';
-  }
+let imap;
 
-  async sendEmail({ to, subject, message, leadName }) {
-    try {
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .message { background: white; padding: 20px; border-radius: 5px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Hello ${leadName}!</h1>
-            </div>
-            <div class="content">
-              <div class="message">
-                ${message.replace(/\n/g, '<br>')}
-              </div>
-              <div class="footer">
-                <p>This email was sent to you as part of our marketing campaign.</p>
-                <p>If you wish to unsubscribe, please reply to this email.</p>
-              </div>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
+const connectImap = () => {
+  imap = new Imap({
+    user: process.env.EMAIL_USER,
+    password: process.env.EMAIL_PASSWORD,
+    host: process.env.EMAIL_IMAP_HOST || 'imap.gmail.com',
+    port: process.env.EMAIL_IMAP_PORT || 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false }
+  });
 
-      const response = await axios.post(
-        `${this.baseUrl}/smtp/email`,
-        {
-          sender: { 
-            email: this.senderEmail,
-            name: 'CRM System'
-          },
-          to: [{ email: to, name: leadName }],
-          subject: subject,
-          htmlContent: htmlContent
-        },
-        {
-          headers: {
-            'accept': 'application/json',
-            'api-key': this.apiKey,
-            'content-type': 'application/json'
+  imap.once('ready', () => {
+    console.log('📧 IMAP Connected');
+    openInbox();
+  });
+
+  imap.once('error', (err) => {
+    console.error('IMAP Error:', err);
+  });
+
+  imap.once('end', () => {
+    console.log('📧 IMAP Connection ended');
+    // Reconnect after 30 seconds
+    setTimeout(connectImap, 30000);
+  });
+
+  imap.connect();
+};
+
+const openInbox = () => {
+  imap.openBox('INBOX', false, (err, box) => {
+    if (err) {
+      console.error('Error opening inbox:', err);
+      return;
+    }
+
+    // Listen for new emails
+    imap.on('mail', () => {
+      fetchNewEmails();
+    });
+
+    // Fetch unseen emails on startup
+    fetchNewEmails();
+  });
+};
+
+const fetchNewEmails = () => {
+  imap.search(['UNSEEN'], (err, results) => {
+    if (err || !results || results.length === 0) {
+      return;
+    }
+
+    const fetch = imap.fetch(results, { bodies: '' });
+
+    fetch.on('message', (msg) => {
+      msg.on('body', (stream) => {
+        simpleParser(stream, async (err, parsed) => {
+          if (err) {
+            console.error('Email parsing error:', err);
+            return;
           }
-        }
-      );
 
-      console.log(`✅ Email sent to ${to}: ${response.data.messageId}`);
-      return { success: true, messageId: response.data.messageId };
-    } catch (error) {
-      console.error('Brevo email error:', error.response?.data || error.message);
-      throw new Error('Failed to send email via Brevo');
-    }
+          try {
+            // Check if lead already exists
+            const existingLead = await Lead.findOne({
+              email: parsed.from.value[0].address,
+              platform: 'email'
+            });
+
+            if (!existingLead) {
+              const lead = new Lead({
+                name: parsed.from.value[0].name || parsed.from.value[0].address,
+                email: parsed.from.value[0].address,
+                platform: 'email',
+                platformId: parsed.from.value[0].address,
+                message: parsed.text || parsed.html || 'No content',
+                status: 'new',
+                qualification: 'cold',
+                metadata: {
+                  subject: parsed.subject,
+                  receivedAt: parsed.date
+                }
+              });
+
+              await lead.save();
+              console.log('📬 New email lead created:', lead._id);
+            }
+          } catch (error) {
+            console.error('Error creating lead from email:', error);
+          }
+        });
+      });
+    });
+
+    fetch.once('end', () => {
+      console.log('Finished processing new emails');
+    });
+  });
+};
+
+exports.startEmailMonitoring = () => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.log('⚠️  Email credentials not configured. Email monitoring disabled.');
+    return;
   }
 
-  async sendBulkEmails(emails) {
-    const results = [];
-    
-    for (const email of emails) {
-      try {
-        const result = await this.sendEmail(email);
-        results.push({ ...email, ...result });
-      } catch (error) {
-        results.push({ ...email, success: false, error: error.message });
-      }
-    }
-
-    return results;
-  }
-}
-
-module.exports = new EmailService();
+  connectImap();
+};

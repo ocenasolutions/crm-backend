@@ -1,73 +1,58 @@
 const Lead = require('../models/Lead');
 
-// Get all leads with filtering and pagination
+// Get all leads
 exports.getAllLeads = async (req, res) => {
   try {
-    const { source, status, page = 1, limit = 50 } = req.query;
+    const { platform, status, qualification, search } = req.query;
+    const query = {};
+
+    if (platform && platform !== 'all') query.platform = platform;
+    if (status && status !== 'all') query.status = status;
+    if (qualification && qualification !== 'all') query.qualification = qualification;
     
-    const filter = {};
-    if (source) filter.source = source;
-    if (status) filter.status = status;
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } }
+      ];
+    }
 
-    const leads = await Lead.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Lead.countDocuments(filter);
+    const leads = await Lead.find(query)
+      .populate('assignedTo', 'name email')
+      .sort({ createdAt: -1 });
 
     res.json(leads);
   } catch (error) {
-    console.error('Error fetching leads:', error);
-    res.status(500).json({ error: 'Failed to fetch leads' });
+    res.status(500).json({ error: error.message });
   }
 };
 
-// Get single lead by ID
-exports.getLeadById = async (req, res) => {
+// Get single lead
+exports.getLead = async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
-    
+    const lead = await Lead.findById(req.params.id)
+      .populate('assignedTo', 'name email')
+      .populate('notes.createdBy', 'name');
+
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
     res.json(lead);
   } catch (error) {
-    console.error('Error fetching lead:', error);
-    res.status(500).json({ error: 'Failed to fetch lead' });
+    res.status(500).json({ error: error.message });
   }
 };
 
-// Create new lead
+// Create lead
 exports.createLead = async (req, res) => {
   try {
-    const { name, email, phone, source, message, metadata } = req.body;
-
-    // Validate required fields
-    if (!name || !source) {
-      return res.status(400).json({ 
-        error: 'Name and source are required' 
-      });
-    }
-
-    const lead = new Lead({
-      name,
-      email,
-      phone,
-      source,
-      message,
-      metadata,
-      status: 'new'
-    });
-
+    const lead = new Lead(req.body);
     await lead.save();
-    console.log(`✅ New lead created: ${name} from ${source}`);
-
     res.status(201).json(lead);
   } catch (error) {
-    console.error('Error creating lead:', error);
-    res.status(500).json({ error: 'Failed to create lead' });
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -76,7 +61,7 @@ exports.updateLead = async (req, res) => {
   try {
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, lastContactedAt: new Date() },
+      req.body,
       { new: true, runValidators: true }
     );
 
@@ -86,8 +71,7 @@ exports.updateLead = async (req, res) => {
 
     res.json(lead);
   } catch (error) {
-    console.error('Error updating lead:', error);
-    res.status(500).json({ error: 'Failed to update lead' });
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -102,60 +86,55 @@ exports.deleteLead = async (req, res) => {
 
     res.json({ message: 'Lead deleted successfully' });
   } catch (error) {
-    console.error('Error deleting lead:', error);
-    res.status(500).json({ error: 'Failed to delete lead' });
+    res.status(500).json({ error: error.message });
   }
 };
 
-// Get lead statistics
-exports.getLeadStats = async (req, res) => {
+// Add note to lead
+exports.addNote = async (req, res) => {
   try {
-    const stats = await Lead.aggregate([
-      {
-        $group: {
-          _id: '$source',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
+    const { text } = req.body;
+    const lead = await Lead.findById(req.params.id);
 
-    const statusStats = await Lead.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    res.json({
-      bySource: stats,
-      byStatus: statusStats,
-      total: await Lead.countDocuments()
-    });
-  } catch (error) {
-    console.error('Error fetching stats:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics' });
-  }
-};
-
-// Bulk import leads
-exports.bulkImportLeads = async (req, res) => {
-  try {
-    const { leads } = req.body;
-
-    if (!Array.isArray(leads) || leads.length === 0) {
-      return res.status(400).json({ error: 'Invalid leads data' });
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
     }
 
-    const result = await Lead.insertMany(leads, { ordered: false });
+    lead.notes.push({
+      text,
+      createdBy: req.userId
+    });
+
+    await lead.save();
+    res.json(lead);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get stats
+exports.getStats = async (req, res) => {
+  try {
+    const total = await Lead.countDocuments();
+    const hot = await Lead.countDocuments({ qualification: 'hot' });
+    const warm = await Lead.countDocuments({ qualification: 'warm' });
+    const cold = await Lead.countDocuments({ qualification: 'cold' });
     
+    const byPlatform = await Lead.aggregate([
+      { $group: { _id: '$platform', count: { $sum: 1 } } }
+    ]);
+
+    const byStatus = await Lead.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
     res.json({
-      message: 'Leads imported successfully',
-      imported: result.length
+      total,
+      qualification: { hot, warm, cold },
+      byPlatform,
+      byStatus
     });
   } catch (error) {
-    console.error('Error importing leads:', error);
-    res.status(500).json({ error: 'Failed to import leads' });
+    res.status(500).json({ error: error.message });
   }
 };

@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const leadSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
     trim: true
   },
   email: {
@@ -15,41 +14,59 @@ const leadSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  source: {
+  platform: {
     type: String,
     required: true,
-    enum: ['whatsapp', 'email', 'instagram', 'facebook', 'website'],
+    enum: ['whatsapp', 'facebook', 'instagram', 'email'],
     lowercase: true
+  },
+  platformId: {
+    type: String, // Unique identifier from the platform (sender ID, etc.)
+    trim: true
+  },
+  message: {
+    type: String,
+    required: true
   },
   status: {
     type: String,
-    enum: ['new', 'contacted', 'qualified', 'converted', 'lost'],
-    default: 'new'
+    enum: ['new', 'contacted', 'follow-up', 'converted', 'closed'],
+    default: 'new',
+    lowercase: true
   },
-  message: {
-    type: String
+  qualification: {
+    type: String,
+    enum: ['hot', 'warm', 'cold'],
+    default: 'cold',
+    lowercase: true
   },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  notes: [{
+    text: String,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   metadata: {
     type: Map,
     of: String
-  },
-  tags: [{
-    type: String
-  }],
-  lastContactedAt: {
-    type: Date
-  },
-  convertedAt: {
-    type: Date
   }
 }, {
   timestamps: true
 });
 
-// Indexes for better query performance
-leadSchema.index({ source: 1, createdAt: -1 });
-leadSchema.index({ status: 1 });
+// Index for faster queries
+leadSchema.index({ platform: 1, status: 1, qualification: 1 });
 leadSchema.index({ email: 1 });
 leadSchema.index({ phone: 1 });
+leadSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Lead', leadSchema);
