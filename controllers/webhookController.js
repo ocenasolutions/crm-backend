@@ -4,32 +4,31 @@ const axios = require('axios');
 // Auto-reply to new messages
 const sendInstagramMessage = async (recipientId, message) => {
   try {
-    // Use Instagram Business Account ID (NOT Page ID)
-    const igBusinessAccountId = process.env.IG_BUSINESS_ACCOUNT_ID;
-    const pageAccessToken = process.env.IG_ACCESS_TOKEN;
+    const igUserId = process.env.IG_USER_ID;
+    const accessToken = process.env.IG_ACCESS_TOKEN;
     
-    if (!igBusinessAccountId) {
-      console.error('❌ IG_BUSINESS_ACCOUNT_ID not configured in .env');
+    if (!igUserId) {
+      console.error('❌ IG_USER_ID not configured');
       return null;
     }
 
-    if (!pageAccessToken) {
-      console.error('❌ IG_ACCESS_TOKEN not configured in .env');
+    if (!accessToken) {
+      console.error('❌ IG_ACCESS_TOKEN not configured');
       return null;
     }
 
     console.log(`📤 Sending Instagram message to: ${recipientId}`);
-    console.log(`📱 Using IG Business Account: ${igBusinessAccountId} (@${process.env.IG_USERNAME})`);
 
+    // IMPORTANT: Use graph.instagram.com (NOT graph.facebook.com)
     const response = await axios.post(
-      `https://graph.facebook.com/v18.0/${igBusinessAccountId}/messages`,
+      `https://graph.instagram.com/v21.0/${igUserId}/messages`,
       {
         recipient: { id: recipientId },
         message: { text: message }
       },
       {
         params: {
-          access_token: pageAccessToken
+          access_token: accessToken
         },
         headers: {
           'Content-Type': 'application/json'
