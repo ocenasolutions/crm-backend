@@ -2,26 +2,18 @@ const express = require('express');
 const router = express.Router();
 const webhookController = require('../controllers/webhookController');
 
+// Instagram routes - BOTH GET and POST
+router.get('/instagram', webhookController.instagramWebhook);
+router.post('/instagram', webhookController.instagramWebhook);
+
+// Facebook routes - BOTH GET and POST
+router.get('/facebook', webhookController.facebookWebhook);
+router.post('/facebook', webhookController.facebookWebhook);
+
 // WhatsApp webhook
-if (webhookController.whatsappWebhook) {
-  router.post('/whatsapp', webhookController.whatsappWebhook);
-}
+router.post('/whatsapp', webhookController.whatsappWebhook);
 
-// Facebook routes
-if (webhookController.facebookWebhook) {
-  router.get('/facebook', webhookController.facebookWebhook);
-  router.post('/facebook', webhookController.facebookWebhook);
-}
-
-// Instagram routes
-if (webhookController.instagramWebhook) {
-  router.get('/instagram', webhookController.instagramWebhook);
-  router.post('/instagram', webhookController.instagramWebhook);
-}
-
-// Instagram debug route (optional)
-if (webhookController.instagramWebhookDebug) {
-  router.post('/instagram/debug', webhookController.instagramWebhookDebug);
-}
+// Instagram debug route
+router.post('/instagram/debug', webhookController.instagramWebhookDebug);
 
 module.exports = router;

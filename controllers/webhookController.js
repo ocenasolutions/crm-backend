@@ -19,7 +19,6 @@ const sendInstagramMessage = async (recipientId, message) => {
 
     console.log(`📤 Sending Instagram message to: ${recipientId}`);
 
-    // IMPORTANT: Use graph.instagram.com (NOT graph.facebook.com)
     const response = await axios.post(
       `https://graph.instagram.com/v21.0/${igUserId}/messages`,
       {
@@ -46,86 +45,50 @@ const sendInstagramMessage = async (recipientId, message) => {
   }
 };
 
-// WhatsApp Webhook (for services like Twilio, WhatsApp Business API)
-exports.whatsappWebhook = async (req, res) => {
-  try {
-    const { From, Body, ProfileName } = req.body;
-
-    const lead = new Lead({
-      name: ProfileName || 'Unknown',
-      phone: From,
-      platform: 'whatsapp',
-      platformId: From,
-      message: Body,
-      status: 'new',
-      qualification: 'cold'
-    });
-
-    await lead.save();
-    
-    console.log('📱 New WhatsApp lead created:', lead._id);
-    res.status(200).send('OK');
-  } catch (error) {
-    console.error('WhatsApp webhook error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Facebook Messenger Webhook
-exports.facebookWebhook = async (req, res) => {
-  try {
-    // Verify webhook (required by Facebook)
-    if (req.query['hub.mode'] === 'subscribe' && 
-        req.query['hub.verify_token'] === process.env.FB_VERIFY_TOKEN) {
-      return res.status(200).send(req.query['hub.challenge']);
-    }
-
-    const { entry } = req.body;
-    
-    if (entry && entry[0].messaging) {
-      const messaging = entry[0].messaging[0];
-      const senderId = messaging.sender.id;
-      const message = messaging.message?.text;
-
-      if (message) {
-        const lead = new Lead({
-          platform: 'facebook',
-          platformId: senderId,
-          message: message,
-          status: 'new',
-          qualification: 'cold'
-        });
-
-        await lead.save();
-        console.log('👤 New Facebook lead created:', lead._id);
-      }
-    }
-
-    res.status(200).send('EVENT_RECEIVED');
-  } catch (error) {
-    console.error('Facebook webhook error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// Instagram Webhook
+// Instagram Webhook - FIXED VERSION
 exports.instagramWebhook = async (req, res) => {
   try {
-    console.log('=== INSTAGRAM WEBHOOK RECEIVED ===');
+    // ==========================================
+    // WEBHOOK VERIFICATION (GET REQUEST)
+    // ==========================================
+    if (req.method === 'GET') {
+      console.log('🔍 Instagram webhook VERIFICATION request received');
+      console.log('Query params:', req.query);
+      
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+      
+      // Check if a token and mode were sent
+      if (mode && token) {
+        // Check the mode and token sent are correct
+        if (mode === 'subscribe' && token === process.env.IG_VERIFY_TOKEN) {
+          console.log('✅ WEBHOOK_VERIFIED');
+          
+          // Respond with 200 OK and challenge token from the request
+          return res.status(200).send(challenge);
+        } else {
+          console.log('❌ Verification token mismatch');
+          console.log('Expected:', process.env.IG_VERIFY_TOKEN);
+          console.log('Received:', token);
+          // Responds with '403 Forbidden' if verify tokens do not match
+          return res.sendStatus(403);
+        }
+      }
+      
+      console.log('❌ Missing hub.mode or hub.verify_token');
+      return res.sendStatus(400);
+    }
+    
+    // ==========================================
+    // WEBHOOK EVENTS (POST REQUEST)
+    // ==========================================
+    console.log('=== INSTAGRAM WEBHOOK EVENT RECEIVED ===');
     console.log('Method:', req.method);
-    console.log('Query:', JSON.stringify(req.query, null, 2));
     console.log('Headers:', JSON.stringify(req.headers, null, 2));
     console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('===================================');
+    console.log('========================================');
     
-    // Verify webhook (GET request from Instagram)
-    if (req.query['hub.mode'] === 'subscribe' && 
-        req.query['hub.verify_token'] === process.env.IG_VERIFY_TOKEN) {
-      console.log('✅ Instagram webhook verification successful');
-      return res.status(200).send(req.query['hub.challenge']);
-    }
-
-    // Handle webhook events (POST request)
     const { entry } = req.body;
     
     if (!entry) {
@@ -140,6 +103,8 @@ exports.instagramWebhook = async (req, res) => {
           const senderId = event.sender?.id;
           const messageText = event.message?.text;
           const senderName = event.sender?.username;
+
+          console.log('📩 Message event:', { senderId, messageText, senderName });
 
           if (senderId && messageText) {
             // Check if lead exists
@@ -157,6 +122,7 @@ exports.instagramWebhook = async (req, res) => {
                 text: `New message: ${messageText}`,
                 createdAt: new Date()
               });
+              console.log('🔄 Updating existing lead:', lead._id);
             } else {
               // Create new lead
               lead = new Lead({
@@ -170,6 +136,7 @@ exports.instagramWebhook = async (req, res) => {
                 interactionCount: 1,
                 lastInteractionAt: new Date()
               });
+              console.log('✨ Creating new lead');
             }
 
             await lead.save();
@@ -195,6 +162,8 @@ exports.instagramWebhook = async (req, res) => {
           if (change.field === 'follows' && change.value?.verb === 'follow') {
             const followerId = change.value.user_id;
             const followerUsername = change.value.username;
+
+            console.log('👤 New follower:', { followerId, followerUsername });
 
             let lead = await Lead.findOne({
               platform: 'instagram',
@@ -244,6 +213,8 @@ exports.instagramWebhook = async (req, res) => {
             const commenterUsername = change.value.from?.username;
             const commentText = change.value.text;
             const mediaId = change.value.media?.id;
+
+            console.log('💬 Comment event:', { commenterId, commenterUsername, commentText });
 
             if (commenterId && commentText) {
               let lead = await Lead.findOne({
@@ -299,6 +270,8 @@ exports.instagramWebhook = async (req, res) => {
             const mentionerUsername = change.value.from?.username;
             const mediaId = change.value.media_id;
 
+            console.log('🏷️ Mention event:', { mentionerId, mentionerUsername });
+
             if (mentionerId) {
               let lead = await Lead.findOne({
                 platform: 'instagram',
@@ -353,24 +326,92 @@ exports.instagramWebhook = async (req, res) => {
   } catch (error) {
     console.error('❌ Instagram webhook error:', error);
     console.error('Error stack:', error.stack);
+    // IMPORTANT: Still return 200 to prevent Meta from disabling the webhook
     res.status(200).send('EVENT_RECEIVED');
+  }
+};
+
+// WhatsApp Webhook (for services like Twilio, WhatsApp Business API)
+exports.whatsappWebhook = async (req, res) => {
+  try {
+    const { From, Body, ProfileName } = req.body;
+
+    const lead = new Lead({
+      name: ProfileName || 'Unknown',
+      phone: From,
+      platform: 'whatsapp',
+      platformId: From,
+      message: Body,
+      status: 'new',
+      qualification: 'cold'
+    });
+
+    await lead.save();
+    
+    console.log('📱 New WhatsApp lead created:', lead._id);
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('WhatsApp webhook error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Facebook Messenger Webhook
+exports.facebookWebhook = async (req, res) => {
+  try {
+    // Verify webhook (GET request)
+    if (req.method === 'GET') {
+      console.log('🔍 Facebook webhook VERIFICATION request');
+      
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+      
+      if (mode === 'subscribe' && token === process.env.FB_VERIFY_TOKEN) {
+        console.log('✅ FACEBOOK WEBHOOK_VERIFIED');
+        return res.status(200).send(challenge);
+      } else {
+        console.log('❌ Facebook verification failed');
+        return res.sendStatus(403);
+      }
+    }
+
+    // Handle events (POST request)
+    const { entry } = req.body;
+    
+    if (entry && entry[0].messaging) {
+      const messaging = entry[0].messaging[0];
+      const senderId = messaging.sender.id;
+      const message = messaging.message?.text;
+
+      if (message) {
+        const lead = new Lead({
+          platform: 'facebook',
+          platformId: senderId,
+          message: message,
+          status: 'new',
+          qualification: 'cold'
+        });
+
+        await lead.save();
+        console.log('👤 New Facebook lead created:', lead._id);
+      }
+    }
+
+    res.status(200).send('EVENT_RECEIVED');
+  } catch (error) {
+    console.error('Facebook webhook error:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
 // Debug endpoint to log raw webhook data
 exports.instagramWebhookDebug = async (req, res) => {
   console.log('=== RAW INSTAGRAM DATA ===');
+  console.log('Method:', req.method);
+  console.log('Query:', JSON.stringify(req.query, null, 2));
   console.log('Body:', JSON.stringify(req.body, null, 2));
   console.log('========================');
-  
-  // Save to a file for inspection
-  const fs = require('fs');
-  const path = require('path');
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = path.join(__dirname, `../instagram-webhook-${timestamp}.json`);
-  
-  fs.writeFileSync(filename, JSON.stringify(req.body, null, 2));
-  console.log(`Saved to: ${filename}`);
   
   res.status(200).send('LOGGED');
 };
