@@ -4,36 +4,45 @@ const axios = require('axios');
 // Auto-reply to new messages
 const sendInstagramMessage = async (recipientId, message) => {
   try {
-    // Instagram Graph API requires IGID (Instagram User ID), not the same as platformId
-    const igUserId = process.env.IG_USER_ID; // Your Instagram Business Account ID
+    // Use Instagram Business Account ID (NOT Page ID)
+    const igBusinessAccountId = process.env.IG_BUSINESS_ACCOUNT_ID;
+    const pageAccessToken = process.env.IG_ACCESS_TOKEN;
     
-    if (!igUserId) {
-      console.error('❌ IG_USER_ID not configured in .env');
+    if (!igBusinessAccountId) {
+      console.error('❌ IG_BUSINESS_ACCOUNT_ID not configured in .env');
       return null;
     }
 
+    if (!pageAccessToken) {
+      console.error('❌ IG_ACCESS_TOKEN not configured in .env');
+      return null;
+    }
+
+    console.log(`📤 Sending Instagram message to: ${recipientId}`);
+    console.log(`📱 Using IG Business Account: ${igBusinessAccountId} (@${process.env.IG_USERNAME})`);
+
     const response = await axios.post(
-      `https://graph.facebook.com/v18.0/${igUserId}/messages`,
+      `https://graph.facebook.com/v18.0/${igBusinessAccountId}/messages`,
       {
         recipient: { id: recipientId },
         message: { text: message }
       },
       {
         params: {
-          access_token: process.env.IG_ACCESS_TOKEN
+          access_token: pageAccessToken
         },
         headers: {
           'Content-Type': 'application/json'
         }
       }
     );
+    
     console.log('✅ Auto-reply sent successfully');
     return response.data;
   } catch (error) {
     console.error('❌ Error sending auto-reply:');
     console.error('Status:', error.response?.status);
     console.error('Data:', JSON.stringify(error.response?.data, null, 2));
-    console.error('Message:', error.message);
     return null;
   }
 };
