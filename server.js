@@ -6,6 +6,7 @@ const leadRoutes = require('./routes/leads');
 const webhookRoutes = require('./routes/webhooks');
 const { startEmailMonitoring } = require('./services/emailService');
 const whatsappRoutes = require('./routes/whatsapp');
+const instagramRoutes = require('./routes/instagram'); 
 const templateRoutes = require('./routes/templates');
 
 dotenv.config();
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/leads', leadRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/instagram', instagramRoutes); // NEW
 app.use('/api/templates', templateRoutes);
 
 // Health check
