@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const leadRoutes = require('./routes/leads');
 const webhookRoutes = require('./routes/webhooks');
 const { startEmailMonitoring } = require('./services/emailService');
+const whatsappRoutes = require('./routes/whatsapp');
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/leads', leadRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
