@@ -61,12 +61,12 @@ Setup Steps
 
 Clone the repository
 
-bashgit clone <repository-url>
-cd omnichannel-crm-backend
+git clone https://github.com/ocenasolutions/crm-backend
+cd crm-backend
 
 Install dependencies
 
-bashnpm install
+npm install
 
 Configure environment variables
 
@@ -77,10 +77,10 @@ NODE_ENV=development
 
 # MongoDB
 MONGODB_URI=mongodb://localhost:27017/crm_db
-# or use MongoDB Atlas
-# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/crm
+or use MongoDB Atlas
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/crm
 
-# Email Configuration (Optional)
+Email Configuration (Optional)
 ENABLE_EMAIL_MONITORING=false
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASSWORD=your-app-specific-password
