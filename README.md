@@ -75,7 +75,7 @@ env# Server
 PORT=5000
 NODE_ENV=development
 
-# MongoDB
+
 MONGODB_URI=mongodb://localhost:27017/crm_db
 or use MongoDB Atlas
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/crm
@@ -87,22 +87,22 @@ EMAIL_PASSWORD=your-app-specific-password
 EMAIL_IMAP_HOST=imap.gmail.com
 EMAIL_IMAP_PORT=993
 
-# WhatsApp (Twilio) - Optional
+Optional
 TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 
-# Facebook Messenger
+Facebook Messenger
 FB_VERIFY_TOKEN=your_custom_verify_token
 FB_PAGE_ACCESS_TOKEN=your_facebook_page_access_token
 
-# Instagram
+ Instagram
 IG_VERIFY_TOKEN=your_custom_verify_token
 IG_ACCESS_TOKEN=your_instagram_access_token
 IG_BUSINESS_ACCOUNT_ID=your_instagram_business_account_id
 IG_USERNAME=your_instagram_username
 
-# Auto-Reply Messages
+ Auto-Reply Messages
 IG_AUTO_REPLY_MESSAGE=Thanks for reaching out! We've received your message and will get back to you soon. 😊
 IG_FOLLOW_MESSAGE=Hey! Thanks for following us! 🎉 Feel free to send us a message if you have any questions!
 IG_COMMENT_REPLY_MESSAGE=Thanks for your comment! We appreciate your engagement! 💬
