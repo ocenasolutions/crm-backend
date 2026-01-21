@@ -105,7 +105,10 @@ exports.instagramWebhook = async (req, res) => {
   try {
     console.log('=== INSTAGRAM WEBHOOK RECEIVED ===');
     console.log('Method:', req.method);
+    console.log('Query:', JSON.stringify(req.query, null, 2));
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
     console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('===================================');
     
     // Verify webhook (GET request from Instagram)
     if (req.query['hub.mode'] === 'subscribe' && 
