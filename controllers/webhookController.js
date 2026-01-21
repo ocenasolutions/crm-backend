@@ -1,4 +1,29 @@
 const Lead = require('../models/Lead');
+const axios = require('axios');
+
+// Auto-reply to new messages
+const sendInstagramMessage = async (recipientId, message) => {
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/me/messages`,
+      {
+        recipient: { id: recipientId },
+        message: { text: message }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.IG_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    console.log('✅ Auto-reply sent successfully');
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error sending auto-reply:', error.response?.data || error.message);
+    throw error;
+  }
+};
 
 // WhatsApp Webhook (for services like Twilio, WhatsApp Business API)
 exports.whatsappWebhook = async (req, res) => {
@@ -67,10 +92,7 @@ exports.instagramWebhook = async (req, res) => {
   try {
     console.log('=== INSTAGRAM WEBHOOK RECEIVED ===');
     console.log('Method:', req.method);
-    console.log('Query params:', JSON.stringify(req.query, null, 2));
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
     console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('===================================');
     
     // Verify webhook (GET request from Instagram)
     if (req.query['hub.mode'] === 'subscribe' && 
@@ -87,72 +109,217 @@ exports.instagramWebhook = async (req, res) => {
       return res.status(200).send('EVENT_RECEIVED');
     }
 
-    console.log('Processing', entry.length, 'entries');
-
     for (const item of entry) {
-      console.log('Entry item:', JSON.stringify(item, null, 2));
-      
-      // Instagram can send data in different formats
-      // Check for messaging events
+      // Handle MESSAGES
       if (item.messaging) {
-        console.log('Found messaging events:', item.messaging.length);
-        
         for (const event of item.messaging) {
-          console.log('Event:', JSON.stringify(event, null, 2));
-          
           const senderId = event.sender?.id;
           const messageText = event.message?.text;
           const senderName = event.sender?.username;
 
-          console.log('Extracted - Sender ID:', senderId, 'Message:', messageText, 'Name:', senderName);
-
           if (senderId && messageText) {
-            const lead = new Lead({
-              name: senderName || 'Instagram User',
+            // Check if lead exists
+            let lead = await Lead.findOne({
               platform: 'instagram',
-              platformId: senderId,
-              message: messageText,
-              status: 'new',
-              qualification: 'cold'
+              platformId: senderId
             });
 
+            if (lead) {
+              // Update existing lead
+              lead.message = messageText;
+              lead.lastInteractionAt = new Date();
+              lead.interactionCount = (lead.interactionCount || 0) + 1;
+              lead.notes.push({
+                text: `New message: ${messageText}`,
+                createdAt: new Date()
+              });
+            } else {
+              // Create new lead
+              lead = new Lead({
+                name: senderName || 'Instagram User',
+                platform: 'instagram',
+                platformId: senderId,
+                message: messageText,
+                status: 'new',
+                qualification: 'cold',
+                interactionType: 'message',
+                interactionCount: 1,
+                lastInteractionAt: new Date()
+              });
+            }
+
             await lead.save();
-            console.log('✅ Instagram lead created successfully!');
-            console.log('Lead ID:', lead._id);
-            console.log('Lead data:', JSON.stringify(lead.toObject(), null, 2));
-          } else {
-            console.log('⚠️ Missing required data - Sender ID:', senderId, 'Message:', messageText);
+            console.log('✅ Instagram message lead saved:', lead._id);
+
+            // Send auto-reply
+            const autoReplyMessage = process.env.IG_AUTO_REPLY_MESSAGE || 
+              "Thanks for reaching out! We've received your message and will get back to you soon. 😊";
+            
+            try {
+              await sendInstagramMessage(senderId, autoReplyMessage);
+            } catch (error) {
+              console.error('Auto-reply failed, but lead was saved');
+            }
           }
         }
       }
-      
-      // Check for changes/comments (Instagram might use this format)
+
+      // Handle FOLLOWS
       if (item.changes) {
-        console.log('Found changes events:', item.changes.length);
-        
         for (const change of item.changes) {
-          console.log('Change:', JSON.stringify(change, null, 2));
-          
-          const value = change.value;
-          const senderId = value?.from?.id || value?.sender_id;
-          const messageText = value?.text || value?.message;
-          const senderName = value?.from?.username;
+          // New follower
+          if (change.field === 'follows' && change.value?.verb === 'follow') {
+            const followerId = change.value.user_id;
+            const followerUsername = change.value.username;
 
-          console.log('Extracted from changes - Sender ID:', senderId, 'Message:', messageText);
-
-          if (senderId && messageText) {
-            const lead = new Lead({
-              name: senderName || 'Instagram User',
+            let lead = await Lead.findOne({
               platform: 'instagram',
-              platformId: senderId,
-              message: messageText,
-              status: 'new',
-              qualification: 'cold'
+              platformId: followerId
             });
 
+            if (lead) {
+              lead.isFollower = true;
+              lead.followedAt = new Date();
+              lead.notes.push({
+                text: 'Started following',
+                createdAt: new Date()
+              });
+            } else {
+              lead = new Lead({
+                name: followerUsername || 'Instagram User',
+                platform: 'instagram',
+                platformId: followerId,
+                message: 'Started following your account',
+                status: 'new',
+                qualification: 'warm',
+                interactionType: 'follow',
+                isFollower: true,
+                followedAt: new Date(),
+                interactionCount: 1,
+                lastInteractionAt: new Date()
+              });
+            }
+
             await lead.save();
-            console.log('✅ Instagram lead created from changes!');
-            console.log('Lead ID:', lead._id);
+            console.log('✅ New follower saved:', lead._id);
+
+            // Send welcome message to new follower
+            const welcomeMessage = process.env.IG_FOLLOW_MESSAGE || 
+              "Hey! Thanks for following us! 🎉 Feel free to send us a message if you have any questions!";
+            
+            try {
+              await sendInstagramMessage(followerId, welcomeMessage);
+            } catch (error) {
+              console.error('Welcome message failed, but follower was saved');
+            }
+          }
+
+          // COMMENTS on posts
+          if (change.field === 'comments' && change.value) {
+            const commenterId = change.value.from?.id;
+            const commenterUsername = change.value.from?.username;
+            const commentText = change.value.text;
+            const mediaId = change.value.media?.id;
+
+            if (commenterId && commentText) {
+              let lead = await Lead.findOne({
+                platform: 'instagram',
+                platformId: commenterId
+              });
+
+              if (lead) {
+                lead.hasCommented = true;
+                lead.interactionCount = (lead.interactionCount || 0) + 1;
+                lead.lastInteractionAt = new Date();
+                lead.notes.push({
+                  text: `Commented on post: ${commentText}`,
+                  createdAt: new Date()
+                });
+              } else {
+                lead = new Lead({
+                  name: commenterUsername || 'Instagram User',
+                  platform: 'instagram',
+                  platformId: commenterId,
+                  message: `Comment: ${commentText}`,
+                  status: 'new',
+                  qualification: 'warm',
+                  interactionType: 'comment',
+                  hasCommented: true,
+                  interactionCount: 1,
+                  lastInteractionAt: new Date(),
+                  metadata: {
+                    mediaId: mediaId,
+                    commentText: commentText
+                  }
+                });
+              }
+
+              await lead.save();
+              console.log('✅ Comment lead saved:', lead._id);
+
+              // Optional: Reply to comment via DM
+              const commentReplyMessage = process.env.IG_COMMENT_REPLY_MESSAGE || 
+                "Thanks for your comment! We appreciate your engagement! 💬";
+              
+              try {
+                await sendInstagramMessage(commenterId, commentReplyMessage);
+              } catch (error) {
+                console.error('Comment reply failed, but comment was saved');
+              }
+            }
+          }
+
+          // MENTIONS in stories/posts
+          if (change.field === 'mentions' && change.value) {
+            const mentionerId = change.value.from?.id;
+            const mentionerUsername = change.value.from?.username;
+            const mediaId = change.value.media_id;
+
+            if (mentionerId) {
+              let lead = await Lead.findOne({
+                platform: 'instagram',
+                platformId: mentionerId
+              });
+
+              if (lead) {
+                lead.hasMentioned = true;
+                lead.interactionCount = (lead.interactionCount || 0) + 1;
+                lead.lastInteractionAt = new Date();
+                lead.notes.push({
+                  text: 'Mentioned you in a story/post',
+                  createdAt: new Date()
+                });
+              } else {
+                lead = new Lead({
+                  name: mentionerUsername || 'Instagram User',
+                  platform: 'instagram',
+                  platformId: mentionerId,
+                  message: 'Mentioned you in a story/post',
+                  status: 'new',
+                  qualification: 'hot',
+                  interactionType: 'mention',
+                  hasMentioned: true,
+                  interactionCount: 1,
+                  lastInteractionAt: new Date(),
+                  metadata: {
+                    mediaId: mediaId
+                  }
+                });
+              }
+
+              await lead.save();
+              console.log('✅ Mention lead saved:', lead._id);
+
+              // Thank them for the mention
+              const mentionReplyMessage = process.env.IG_MENTION_REPLY_MESSAGE || 
+                "Wow! Thanks so much for mentioning us! 🙌 We really appreciate it!";
+              
+              try {
+                await sendInstagramMessage(mentionerId, mentionReplyMessage);
+              } catch (error) {
+                console.error('Mention reply failed, but mention was saved');
+              }
+            }
           }
         }
       }
@@ -162,11 +329,11 @@ exports.instagramWebhook = async (req, res) => {
   } catch (error) {
     console.error('❌ Instagram webhook error:', error);
     console.error('Error stack:', error.stack);
-    // Always return 200 to Instagram to avoid retries
     res.status(200).send('EVENT_RECEIVED');
   }
 };
 
+// Debug endpoint to log raw webhook data
 exports.instagramWebhookDebug = async (req, res) => {
   console.log('=== RAW INSTAGRAM DATA ===');
   console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -174,7 +341,12 @@ exports.instagramWebhookDebug = async (req, res) => {
   
   // Save to a file for inspection
   const fs = require('fs');
-  fs.writeFileSync('instagram-webhook-data.json', JSON.stringify(req.body, null, 2));
+  const path = require('path');
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = path.join(__dirname, `../instagram-webhook-${timestamp}.json`);
+  
+  fs.writeFileSync(filename, JSON.stringify(req.body, null, 2));
+  console.log(`Saved to: ${filename}`);
   
   res.status(200).send('LOGGED');
 };

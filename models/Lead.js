@@ -21,7 +21,7 @@ const leadSchema = new mongoose.Schema({
     lowercase: true
   },
   platformId: {
-    type: String, // Unique identifier from the platform (sender ID, etc.)
+    type: String,
     trim: true
   },
   message: {
@@ -44,6 +44,40 @@ const leadSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  
+  // Instagram-specific fields
+  interactionType: {
+    type: String,
+    enum: ['message', 'follow', 'comment', 'mention', 'story_reply'],
+    lowercase: true
+  },
+  isFollower: {
+    type: Boolean,
+    default: false
+  },
+  hasCommented: {
+    type: Boolean,
+    default: false
+  },
+  hasMentioned: {
+    type: Boolean,
+    default: false
+  },
+  followedAt: {
+    type: Date
+  },
+  lastInteractionAt: {
+    type: Date
+  },
+  interactionCount: {
+    type: Number,
+    default: 0
+  },
+  autoReplySent: {
+    type: Boolean,
+    default: false
+  },
+  
   notes: [{
     text: String,
     createdBy: {
@@ -63,10 +97,13 @@ const leadSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster queries
+// Indexes
 leadSchema.index({ platform: 1, status: 1, qualification: 1 });
+leadSchema.index({ platformId: 1, platform: 1 });
 leadSchema.index({ email: 1 });
 leadSchema.index({ phone: 1 });
 leadSchema.index({ createdAt: -1 });
+leadSchema.index({ lastInteractionAt: -1 });
+leadSchema.index({ interactionType: 1 });
 
 module.exports = mongoose.model('Lead', leadSchema);

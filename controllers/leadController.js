@@ -1,14 +1,16 @@
 const Lead = require('../models/Lead');
 
-// Get all leads
+// Get all leads with enhanced filtering
 exports.getAllLeads = async (req, res) => {
   try {
-    const { platform, status, qualification, search } = req.query;
+    const { platform, status, qualification, search, interactionType, isFollower } = req.query;
     const query = {};
 
     if (platform && platform !== 'all') query.platform = platform;
     if (status && status !== 'all') query.status = status;
     if (qualification && qualification !== 'all') query.qualification = qualification;
+    if (interactionType && interactionType !== 'all') query.interactionType = interactionType;
+    if (isFollower === 'true') query.isFollower = true;
     
     if (search) {
       query.$or = [
@@ -20,9 +22,58 @@ exports.getAllLeads = async (req, res) => {
 
     const leads = await Lead.find(query)
       .populate('assignedTo', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ lastInteractionAt: -1, createdAt: -1 });
 
     res.json(leads);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get Instagram-specific stats
+exports.getInstagramStats = async (req, res) => {
+  try {
+    const totalMessages = await Lead.countDocuments({ 
+      platform: 'instagram',
+      interactionType: 'message'
+    });
+    
+    const totalFollowers = await Lead.countDocuments({ 
+      platform: 'instagram',
+      isFollower: true
+    });
+    
+    const totalComments = await Lead.countDocuments({ 
+      platform: 'instagram',
+      hasCommented: true
+    });
+    
+    const totalMentions = await Lead.countDocuments({ 
+      platform: 'instagram',
+      hasMentioned: true
+    });
+
+    const recentInteractions = await Lead.find({
+      platform: 'instagram',
+      lastInteractionAt: { $exists: true }
+    })
+    .sort({ lastInteractionAt: -1 })
+    .limit(10)
+    .select('name interactionType lastInteractionAt message');
+
+    const interactionsByType = await Lead.aggregate([
+      { $match: { platform: 'instagram' } },
+      { $group: { _id: '$interactionType', count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      totalMessages,
+      totalFollowers,
+      totalComments,
+      totalMentions,
+      recentInteractions,
+      interactionsByType
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -112,7 +163,7 @@ exports.addNote = async (req, res) => {
   }
 };
 
-// Get stats
+// Get overall stats
 exports.getStats = async (req, res) => {
   try {
     const total = await Lead.countDocuments();
@@ -128,11 +179,22 @@ exports.getStats = async (req, res) => {
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
 
+    const byInteractionType = await Lead.aggregate([
+      { 
+        $match: { 
+          platform: 'instagram',
+          interactionType: { $exists: true }
+        } 
+      },
+      { $group: { _id: '$interactionType', count: { $sum: 1 } } }
+    ]);
+
     res.json({
       total,
       qualification: { hot, warm, cold },
       byPlatform,
-      byStatus
+      byStatus,
+      byInteractionType
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

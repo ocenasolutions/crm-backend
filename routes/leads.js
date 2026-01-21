@@ -7,12 +7,13 @@ const {
   updateLead,
   deleteLead,
   addNote,
-  getStats
+  getStats,
+  getInstagramStats  
 } = require('../controllers/leadController');
 
-// All routes are now public (no authentication required)
 router.get('/', getAllLeads);
 router.get('/stats', getStats);
+router.get('/instagram/stats', getInstagramStats);  
 router.get('/:id', getLead);
 router.post('/', createLead);
 router.put('/:id', updateLead);
