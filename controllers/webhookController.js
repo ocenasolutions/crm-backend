@@ -4,15 +4,25 @@ const axios = require('axios');
 // Auto-reply to new messages
 const sendInstagramMessage = async (recipientId, message) => {
   try {
+    // Instagram Graph API requires IGID (Instagram User ID), not the same as platformId
+    const igUserId = process.env.IG_USER_ID; // Your Instagram Business Account ID
+    
+    if (!igUserId) {
+      console.error('❌ IG_USER_ID not configured in .env');
+      return null;
+    }
+
     const response = await axios.post(
-      `https://graph.facebook.com/v18.0/me/messages`,
+      `https://graph.facebook.com/v18.0/${igUserId}/messages`,
       {
         recipient: { id: recipientId },
         message: { text: message }
       },
       {
+        params: {
+          access_token: process.env.IG_ACCESS_TOKEN
+        },
         headers: {
-          'Authorization': `Bearer ${process.env.IG_ACCESS_TOKEN}`,
           'Content-Type': 'application/json'
         }
       }
@@ -20,8 +30,11 @@ const sendInstagramMessage = async (recipientId, message) => {
     console.log('✅ Auto-reply sent successfully');
     return response.data;
   } catch (error) {
-    console.error('❌ Error sending auto-reply:', error.response?.data || error.message);
-    throw error;
+    console.error('❌ Error sending auto-reply:');
+    console.error('Status:', error.response?.status);
+    console.error('Data:', JSON.stringify(error.response?.data, null, 2));
+    console.error('Message:', error.message);
+    return null;
   }
 };
 
