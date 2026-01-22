@@ -4,3 +4,6 @@ run.js
 .env
 .env.old
 .env*
+webhook-logs.json
+get-instagram-id.js
+check-ig-permissions.js
