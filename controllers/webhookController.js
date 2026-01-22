@@ -7,6 +7,8 @@ const path = require('path');
 // Store to track recent webhook entries (in-memory cache)
 const recentWebhooks = new Map();
 
+
+
 // Enhanced logging function
 const logWebhookData = (data) => {
   const logEntry = {
@@ -44,7 +46,7 @@ const logWebhookData = (data) => {
 // This fixes the "message_edit" ghost event issue
 const fetchMessageContent = async (messageId) => {
   try {
-    const accessToken = process.env.IG_ACCESS_TOKEN;
+    const accessToken = "EAAceqxEyETIBQqU3Rf7fn1rynqKeV0DImGaIefoqHsmbJ9OkFemQN6Tz1GFeyLJjuyt8IZA8ZAMoZBh7ZAZCZB7FrncDnbZCHFikGEeemvhV9yp4B4N5wAeb8KDWsZC7Cg2tBZA7ZAAGMo0YzFdFtGlNT3sYh2SZAZBgpV7Sv6Gq3vMBc3PnGMmeOnZAcyWHJMkDCVQmiHVN5Hz8R7Msj45hNLY9W";
     if (!accessToken) throw new Error('IG_ACCESS_TOKEN not configured');
 
     console.log(`🔍 Fetching missing content for message ID: ${messageId}`);
